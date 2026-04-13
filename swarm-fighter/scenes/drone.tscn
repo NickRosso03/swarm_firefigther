@@ -1,0 +1,90 @@
+[gd_scene format=3 uid="uid://bbmj6rjyosvs4"]
+
+[ext_resource type="Script" uid="uid://cdlucxhr0gick" path="res://scripts/drone.gd" id="1_x0dmg"]
+[ext_resource type="PackedScene" uid="uid://c562o4ikhmja3" path="res://scenes/model.tscn" id="2_x0dmg"]
+
+[sub_resource type="BoxShape3D" id="BoxShape3D_f4gsr"]
+size = Vector3(0.8, 0.3, 0.8)
+
+[sub_resource type="Curve" id="Curve_knnud"]
+_limits = [0.0, 3.0, 0.0, 1.0032573]
+_data = [Vector2(0.07054153, 0.39272726), 0.0, 0.0, 0, 0, Vector2(0.46831733, 3), 0.0, 0.0, 0, 0, Vector2(0.977784, 1.4967272), 0.0, 0.0, 0, 0]
+point_count = 3
+
+[sub_resource type="CurveTexture" id="CurveTexture_1r4ts"]
+curve = SubResource("Curve_knnud")
+
+[sub_resource type="ParticleProcessMaterial" id="ParticleProcessMaterial_x0dmg"]
+emission_shape = 3
+emission_box_extents = Vector3(0.2, 0.2, 0.2)
+angle_min = 1.0728835e-05
+angle_max = 1.0728835e-05
+inherit_velocity_ratio = 1.0
+direction = Vector3(0, 0, -1)
+spread = 0.0
+initial_velocity_min = 4.0
+initial_velocity_max = 6.0
+gravity = Vector3(0, -1, 0)
+scale_curve = SubResource("CurveTexture_1r4ts")
+
+[sub_resource type="StandardMaterial3D" id="StandardMaterial3D_x0dmg"]
+transparency = 1
+shading_mode = 0
+albedo_color = Color(0, 1, 1, 1)
+
+[sub_resource type="BoxMesh" id="BoxMesh_f4gsr"]
+material = SubResource("StandardMaterial3D_x0dmg")
+size = Vector3(0.1, 0.1, 0.1)
+
+[sub_resource type="CylinderShape3D" id="CylinderShape3D_knnud"]
+height = 100.0
+radius = 75.0
+
+[node name="Drone" type="RigidBody3D" unique_id=708550411]
+collision_layer = 2
+collision_mask = 3
+mass = 1.5
+linear_damp = 1.0
+angular_damp = 3.0
+script = ExtResource("1_x0dmg")
+
+[node name="Sketchfab_Scene" parent="." unique_id=93821660 instance=ExtResource("2_x0dmg")]
+transform = Transform3D(6, 0, 0, 0, 6, 0, 0, 0, 6, 0, -1, 0)
+
+[node name="CollisionShape3D" type="CollisionShape3D" parent="." unique_id=152622638]
+transform = Transform3D(2, 0, 0, 0, 2, 0, 0, 0, 2, 0, 0, 0)
+shape = SubResource("BoxShape3D_f4gsr")
+
+[node name="MiniHUD" type="Label3D" parent="." unique_id=316605310]
+transform = Transform3D(1, 0, 0, 0, 1, 0, 0, 0, 1, 0, 0.3, 0)
+billboard = 1
+text = "D"
+
+[node name="WaterCannon" type="Node3D" parent="." unique_id=2018998429]
+transform = Transform3D(1, 0, 0, 0, 1, 0, 0, 0, 1, 0, -0.7, 0)
+
+[node name="FoamParticles" type="GPUParticles3D" parent="WaterCannon" unique_id=701623417]
+amount = 100
+lifetime = 3.0
+speed_scale = 2.0
+randomness = 1.0
+process_material = SubResource("ParticleProcessMaterial_x0dmg")
+draw_pass_1 = SubResource("BoxMesh_f4gsr")
+
+[node name="VisionConeArea" type="Area3D" parent="." unique_id=146423892]
+collision_layer = 0
+collision_mask = 4
+
+[node name="CollisionShape3D" type="CollisionShape3D" parent="VisionConeArea" unique_id=1694616165]
+transform = Transform3D(1, 0, 0, 0, 1, 0, 0, 0, 1, 0, -50, 0)
+shape = SubResource("CylinderShape3D_knnud")
+debug_color = Color(13.50434, 0, 3.6566076, 1)
+
+[node name="DownwardRayCast" type="RayCast3D" parent="." unique_id=1146854751]
+target_position = Vector3(0, -14, 0)
+collision_mask = 4
+collide_with_areas = true
+collide_with_bodies = false
+
+[connection signal="area_entered" from="VisionConeArea" to="." method="_on_vision_cone_area_area_entered"]
+[connection signal="area_exited" from="VisionConeArea" to="." method="_on_vision_cone_area_area_exited"]

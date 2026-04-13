@@ -1,0 +1,191 @@
+[gd_scene format=3 uid="uid://ci4w6gxsyoann"]
+
+[ext_resource type="Script" uid="uid://dxclsknsjeov5" path="res://scripts/world.gd" id="1_k0juu"]
+[ext_resource type="PackedScene" uid="uid://bbmj6rjyosvs4" path="res://scenes/drone.tscn" id="2_71j4m"]
+[ext_resource type="Script" uid="uid://cplsyfk1a68ac" path="res://scripts/fire_manager.gd" id="3_qfnet"]
+[ext_resource type="PackedScene" uid="uid://c7l6b4k17k1an" path="res://scenes/fire_zone.tscn" id="4_i7141"]
+[ext_resource type="Script" uid="uid://nysg6ufsgtc3" path="res://scripts/free_camera.gd" id="5_71j4m"]
+[ext_resource type="Script" uid="uid://ohkwaj2umy8t" path="res://scripts/obstacle_spawner.gd" id="6_i7141"]
+[ext_resource type="Script" uid="uid://dle752icq53hx" path="res://scripts/obstacle_config.gd" id="7_w7kh3"]
+[ext_resource type="PackedScene" uid="uid://dcqps32t4bv8c" path="res://scenes/obstacles/tree2.tscn" id="8_4mrxx"]
+[ext_resource type="PackedScene" uid="uid://cxstwr2fq76k3" path="res://scenes/obstacles/tree.tscn" id="8_e3hyu"]
+[ext_resource type="PackedScene" uid="uid://deyidkrls36bs" path="res://scenes/obstacles/log.tscn" id="9_7r4gi"]
+[ext_resource type="PackedScene" uid="uid://iewqylycuabw" path="res://scenes/obstacles/tree3.tscn" id="11_e3hyu"]
+[ext_resource type="PackedScene" uid="uid://b0eegagt2jxd7" path="res://scenes/obstacles/rock.tscn" id="12_q5onr"]
+[ext_resource type="PackedScene" uid="uid://cde58dbbluqd6" path="res://scenes/obstacles/rock2.tscn" id="13_jhx03"]
+[ext_resource type="PackedScene" uid="uid://cq3vl8px7hhxw" path="res://scenes/obstacles/stone.tscn" id="14_o8fc1"]
+[ext_resource type="PackedScene" uid="uid://2m7gjvswfkvp" path="res://scenes/obstacles/stone2.tscn" id="15_xo05s"]
+[ext_resource type="PackedScene" uid="uid://cwen6unt2cuw5" path="res://scenes/obstacles/tree4.tscn" id="16_dss4m"]
+[ext_resource type="PackedScene" uid="uid://c76pu4w2ofloi" path="res://scenes/obstacles/stone3.tscn" id="17_7t5mc"]
+[ext_resource type="PackedScene" uid="uid://dnwxufnrqcyap" path="res://scenes/obstacles/shrooms.tscn" id="18_lakw3"]
+
+[sub_resource type="ProceduralSkyMaterial" id="ProceduralSkyMaterial_71j4m"]
+sky_top_color = Color(0.74, 0.21460001, 0.21460001, 1)
+sky_horizon_color = Color(0.86438876, 0.59437495, 0, 1)
+ground_bottom_color = Color(0.30968443, 0.085636355, 0.10106965, 1)
+ground_horizon_color = Color(0.9139936, 0.55265, 0.29227278, 1)
+
+[sub_resource type="Sky" id="Sky_qfnet"]
+sky_material = SubResource("ProceduralSkyMaterial_71j4m")
+
+[sub_resource type="Environment" id="Environment_4mrxx"]
+background_mode = 2
+sky = SubResource("Sky_qfnet")
+ambient_light_color = Color(1, 1, 1, 1)
+ambient_light_energy = 0.5
+glow_enabled = true
+
+[sub_resource type="StandardMaterial3D" id="StandardMaterial3D_7r4gi"]
+albedo_color = Color(0.39966545, 0.6085393, 0, 1)
+
+[sub_resource type="PlaneMesh" id="PlaneMesh_w7kh3"]
+material = SubResource("StandardMaterial3D_7r4gi")
+size = Vector2(200, 200)
+
+[sub_resource type="WorldBoundaryShape3D" id="WorldBoundaryShape3D_e3hyu"]
+
+[sub_resource type="Resource" id="Resource_lakw3"]
+script = ExtResource("7_w7kh3")
+scene = ExtResource("8_e3hyu")
+count = 35
+min_scale = 7.0
+max_scale = 12.0
+plant = true
+metadata/_custom_type_script = "uid://dle752icq53hx"
+
+[sub_resource type="Resource" id="Resource_pm21f"]
+script = ExtResource("7_w7kh3")
+scene = ExtResource("8_4mrxx")
+count = 30
+min_scale = 8.2
+max_scale = 11.4
+plant = true
+metadata/_custom_type_script = "uid://dle752icq53hx"
+
+[sub_resource type="Resource" id="Resource_2lf6f"]
+script = ExtResource("7_w7kh3")
+scene = ExtResource("11_e3hyu")
+count = 35
+min_scale = 7.5
+max_scale = 10.7
+plant = true
+metadata/_custom_type_script = "uid://dle752icq53hx"
+
+[sub_resource type="Resource" id="Resource_7iits"]
+script = ExtResource("7_w7kh3")
+scene = ExtResource("16_dss4m")
+count = 25
+min_scale = 6.1
+max_scale = 9.3
+plant = true
+metadata/_custom_type_script = "uid://dle752icq53hx"
+
+[sub_resource type="Resource" id="Resource_oo54l"]
+script = ExtResource("7_w7kh3")
+scene = ExtResource("9_7r4gi")
+count = 5
+min_scale = 4.0
+max_scale = 6.3
+plant = true
+metadata/_custom_type_script = "uid://dle752icq53hx"
+
+[sub_resource type="Resource" id="Resource_kpybi"]
+script = ExtResource("7_w7kh3")
+scene = ExtResource("12_q5onr")
+count = 7
+min_scale = 3.2
+max_scale = 7.2
+metadata/_custom_type_script = "uid://dle752icq53hx"
+
+[sub_resource type="Resource" id="Resource_ctatt"]
+script = ExtResource("7_w7kh3")
+scene = ExtResource("13_jhx03")
+count = 10
+min_scale = 3.2
+max_scale = 7.4
+metadata/_custom_type_script = "uid://dle752icq53hx"
+
+[sub_resource type="Resource" id="Resource_xgqkh"]
+script = ExtResource("7_w7kh3")
+scene = ExtResource("14_o8fc1")
+min_scale = 3.3
+max_scale = 7.2
+metadata/_custom_type_script = "uid://dle752icq53hx"
+
+[sub_resource type="Resource" id="Resource_munwf"]
+script = ExtResource("7_w7kh3")
+scene = ExtResource("15_xo05s")
+min_scale = 2.0
+max_scale = 8.5
+metadata/_custom_type_script = "uid://dle752icq53hx"
+
+[sub_resource type="Resource" id="Resource_ts3gi"]
+script = ExtResource("7_w7kh3")
+scene = ExtResource("17_7t5mc")
+min_scale = 5.0
+max_scale = 7.3
+metadata/_custom_type_script = "uid://dle752icq53hx"
+
+[sub_resource type="Resource" id="Resource_0nbtd"]
+script = ExtResource("7_w7kh3")
+scene = ExtResource("18_lakw3")
+min_scale = 2.3
+max_scale = 4.1
+metadata/_custom_type_script = "uid://dle752icq53hx"
+
+[node name="World" type="Node3D" unique_id=59395442]
+script = ExtResource("1_k0juu")
+drone_scene = ExtResource("2_71j4m")
+start_altitude = 1.0
+
+[node name="WorldEnvironment" type="WorldEnvironment" parent="." unique_id=1634695215]
+environment = SubResource("Environment_4mrxx")
+
+[node name="DirectionalLight3D" type="DirectionalLight3D" parent="." unique_id=1567986886]
+transform = Transform3D(0.70710677, -0.49999997, 0.49999997, 0, 0.70710677, 0.70710677, -0.70710677, -0.49999997, 0.49999997, 0, 0, 0)
+shadow_enabled = true
+
+[node name="Ground" type="StaticBody3D" parent="." unique_id=1951012158]
+
+[node name="MeshInstance3D" type="MeshInstance3D" parent="Ground" unique_id=2136786704]
+mesh = SubResource("PlaneMesh_w7kh3")
+
+[node name="CollisionShape3D" type="CollisionShape3D" parent="Ground" unique_id=2025189960]
+shape = SubResource("WorldBoundaryShape3D_e3hyu")
+
+[node name="Drones" type="Node3D" parent="." unique_id=1522874661]
+
+[node name="FireManager" type="Node3D" parent="." unique_id=1933600818]
+script = ExtResource("3_qfnet")
+fire_zone_scene = ExtResource("4_i7141")
+max_ground_fires = 5
+
+[node name="Camera3D" type="Camera3D" parent="." unique_id=621970684]
+transform = Transform3D(-0.99995536, -0.009353714, 0.0014107754, -0.0053870017, 0.6856787, 0.7278843, -0.0077757593, 0.7278441, -0.68569845, 0, 40, -80)
+script = ExtResource("5_71j4m")
+
+[node name="UI" type="CanvasLayer" parent="." unique_id=1130160557]
+
+[node name="ResetButton" type="Button" parent="UI" unique_id=1127520637]
+visible = false
+anchors_preset = 1
+anchor_left = 1.0
+anchor_right = 1.0
+offset_left = -1252.0
+offset_top = 10.0
+offset_right = -1201.0
+offset_bottom = 41.0
+grow_horizontal = 0
+text = "Reset"
+
+[node name="StatusPanel" type="VBoxContainer" parent="UI" unique_id=6512733]
+offset_left = 10.0
+offset_top = 10.0
+offset_right = 50.0
+offset_bottom = 50.0
+
+[node name="ObstacleSpawner" type="Node3D" parent="." unique_id=2091705660]
+script = ExtResource("6_i7141")
+obstacle_configs = Array[ExtResource("7_w7kh3")]([SubResource("Resource_lakw3"), SubResource("Resource_pm21f"), SubResource("Resource_2lf6f"), SubResource("Resource_7iits"), SubResource("Resource_oo54l"), SubResource("Resource_kpybi"), SubResource("Resource_ctatt"), SubResource("Resource_xgqkh"), SubResource("Resource_munwf"), SubResource("Resource_ts3gi"), SubResource("Resource_0nbtd")])
+area_half = 90.0
+min_dist_from_center = 1.0

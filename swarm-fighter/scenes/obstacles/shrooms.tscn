@@ -1,0 +1,16 @@
+[gd_scene format=3 uid="uid://dnwxufnrqcyap"]
+
+[ext_resource type="PackedScene" uid="uid://d37fmdglvbrtc" path="res://assets/obstacles/mushroom_redGroup.glb" id="1_1p15y"]
+
+[sub_resource type="CylinderShape3D" id="CylinderShape3D_4tkwb"]
+height = 0.2
+radius = 0.15
+
+[node name="Node3D" type="StaticBody3D" unique_id=1609823588]
+
+[node name="CollisionShape3D" type="CollisionShape3D" parent="." unique_id=1428924779]
+transform = Transform3D(1, 0, 0, 0, 1, 0, 0, 0, 1, 0, 0.075, 0)
+shape = SubResource("CylinderShape3D_4tkwb")
+debug_color = Color(1, 0, 0.07123851, 1)
+
+[node name="mushroom_redGroup2" parent="." unique_id=1671715797 instance=ExtResource("1_1p15y")]

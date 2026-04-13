@@ -1,0 +1,40 @@
+; Engine configuration file.
+; It's best edited using the editor UI and not directly,
+; since the parameters that go here are not all obvious.
+;
+; Format:
+;   [section] ; section goes between []
+;   param=value ; assign values to parameters
+
+config_version=5
+
+[animation]
+
+compatibility/default_parent_skeleton_in_mesh_instance_3d=true
+
+[application]
+
+config/name="swarm_fighter"
+run/main_scene="uid://ci4w6gxsyoann"
+config/features=PackedStringArray("4.6", "Forward Plus")
+boot_splash/bg_color=Color(0.20989946, 0.0153559, 0.31577396, 1)
+boot_splash/show_image=false
+boot_splash/use_filter=false
+
+[autoload]
+
+DDS="*res://autoloads/dds.gd"
+
+[editor]
+
+movie_writer/movie_file="/home/mitrandir/scrivania/droni.png"
+
+[editor_plugins]
+
+enabled=PackedStringArray()
+
+[layer_names]
+
+3d_physics/layer_1="Enviroment"
+3d_physics/layer_2="Drones"
+3d_physics/layer_3="Fires"

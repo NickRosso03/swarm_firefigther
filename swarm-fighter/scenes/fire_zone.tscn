@@ -1,0 +1,72 @@
+[gd_scene format=3 uid="uid://c7l6b4k17k1an"]
+
+[ext_resource type="Script" uid="uid://dlgsffysjpjwj" path="res://scripts/fire_zone.gd" id="1_t5u7e"]
+
+[sub_resource type="Curve" id="Curve_t5u7e"]
+_data = [Vector2(0, 1), 0.0, 0.003007135, 0, 0, Vector2(0.4, 0.8), 0.0, 0.0, 0, 0, Vector2(0.5, 0.5), 0.0, 0.0, 0, 0]
+point_count = 3
+
+[sub_resource type="CurveTexture" id="CurveTexture_48gl5"]
+curve = SubResource("Curve_t5u7e")
+
+[sub_resource type="ParticleProcessMaterial" id="ParticleProcessMaterial_48gl5"]
+emission_shape_scale = Vector3(2, 0.5, 2)
+emission_shape = 1
+emission_sphere_radius = 1.5
+velocity_pivot = Vector3(0, 1, 0)
+direction = Vector3(0, 2, 0)
+spread = 10.0
+initial_velocity_min = 0.5
+initial_velocity_max = 3.0
+gravity = Vector3(0, -1, 0)
+radial_accel_min = -1.0000023
+radial_accel_max = -2.2351742e-06
+scale_min = 0.29999998
+scale_max = 0.79999995
+scale_curve = SubResource("CurveTexture_48gl5")
+color = Color(1, 0.050000012, 0, 1)
+hue_variation_min = 0.119999975
+hue_variation_max = 0.119999975
+turbulence_noise_scale = 10.0
+
+[sub_resource type="StandardMaterial3D" id="StandardMaterial3D_oakt0"]
+cull_mode = 2
+albedo_color = Color(1, 0.050000012, 0, 1)
+
+[sub_resource type="BoxMesh" id="BoxMesh_kvjp3"]
+material = SubResource("StandardMaterial3D_oakt0")
+size = Vector3(0.5, 0.5, 0.5)
+
+[sub_resource type="SphereShape3D" id="SphereShape3D_r0ls1"]
+radius = 10.0
+
+[sub_resource type="SystemFont" id="SystemFont_t5u7e"]
+subpixel_positioning = 0
+
+[node name="FireZone" type="Node3D" unique_id=385979793]
+script = ExtResource("1_t5u7e")
+
+[node name="Particles" type="GPUParticles3D" parent="." unique_id=531754744]
+amount = 128
+lifetime = 2.0
+randomness = 1.0
+process_material = SubResource("ParticleProcessMaterial_48gl5")
+draw_pass_1 = SubResource("BoxMesh_kvjp3")
+
+[node name="DetectionArea" type="Area3D" parent="." unique_id=567224133]
+collision_layer = 4
+
+[node name="CollisionShape3D" type="CollisionShape3D" parent="DetectionArea" unique_id=1639917094]
+shape = SubResource("SphereShape3D_r0ls1")
+
+[node name="Label3D" type="Label3D" parent="." unique_id=468485589]
+pixel_size = 0.05
+offset = Vector2(0, 100)
+billboard = 1
+modulate = Color(1, 0.91764706, 0.08235294, 1)
+outline_modulate = Color(0.8509804, 0, 0, 1)
+text = "FIRE
+"
+font = SubResource("SystemFont_t5u7e")
+
+[node name="OmniLight3D" type="OmniLight3D" parent="." unique_id=1376428347]

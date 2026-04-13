@@ -1,0 +1,15 @@
+[gd_scene format=3 uid="uid://b0eegagt2jxd7"]
+
+[ext_resource type="PackedScene" uid="uid://b7c3nxj3c5vcy" path="res://assets/obstacles/rock_tallB.glb" id="1_1di36"]
+
+[sub_resource type="BoxShape3D" id="BoxShape3D_vplca"]
+size = Vector3(0.6, 0.9, 0.6)
+
+[node name="Node3D" type="StaticBody3D" unique_id=1609823588]
+
+[node name="CollisionShape3D" type="CollisionShape3D" parent="." unique_id=1428924779]
+transform = Transform3D(1, 0, 0, 0, 1, 0, 0, 0, 1, 0, 0.4, 0)
+shape = SubResource("BoxShape3D_vplca")
+debug_color = Color(1, 0, 0.07123851, 1)
+
+[node name="rock_tallB2" parent="." unique_id=180903044 instance=ExtResource("1_1di36")]

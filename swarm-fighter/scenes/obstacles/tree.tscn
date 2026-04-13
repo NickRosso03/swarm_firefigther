@@ -1,0 +1,14 @@
+[gd_scene format=3 uid="uid://cxstwr2fq76k3"]
+
+[ext_resource type="PackedScene" uid="uid://l8t8ysovde1k" path="res://assets/obstacles/tree_pineSmallA.glb" id="1_avsvi"]
+
+[sub_resource type="BoxShape3D" id="BoxShape3D_vplca"]
+size = Vector3(0.5, 1, 0.5)
+
+[node name="Node3D" type="StaticBody3D" unique_id=1609823588]
+
+[node name="CollisionShape3D" type="CollisionShape3D" parent="." unique_id=1428924779]
+transform = Transform3D(1, 0, 0, 0, 1, 0, 0, 0, 1, 0, 0.5, 0)
+shape = SubResource("BoxShape3D_vplca")
+
+[node name="tree_pineSmallA2" parent="." unique_id=731631089 instance=ExtResource("1_avsvi")]

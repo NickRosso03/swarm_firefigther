@@ -1,0 +1,15 @@
+[gd_scene format=3 uid="uid://deyidkrls36bs"]
+
+[ext_resource type="PackedScene" uid="uid://h8q8wsp3slie" path="res://assets/obstacles/log_large.glb" id="1_o3rej"]
+
+[sub_resource type="BoxShape3D" id="BoxShape3D_vplca"]
+size = Vector3(0.29675293, 1.1, 0.27062988)
+
+[node name="Node3D" type="StaticBody3D" unique_id=1609823588]
+
+[node name="log_large2" parent="." unique_id=136850217 instance=ExtResource("1_o3rej")]
+
+[node name="CollisionShape3D" type="CollisionShape3D" parent="." unique_id=1428924779]
+transform = Transform3D(-4.371139e-08, -1, 0, 1, -4.371139e-08, 0, 0, 0, 1, -1.0218177e-09, 0.12337647, 0.010314941)
+shape = SubResource("BoxShape3D_vplca")
+debug_color = Color(0.9607843, 0, 0.5137255, 1)
