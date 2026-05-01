@@ -1,48 +1,62 @@
 ## fire_zone.gd — Singola zona di incendio nella scena.
 ##
-## Struttura del nodo (fire_zone.tscn):
-##   FireZone  (Node3D)
-##   ├── Particles          (GPUParticles3D)
-##   ├── DetectionArea      (Area3D)
-##   │   └── CollisionShape3D (SphereShape3D)
-##   ├── Label3D            (opzionale)
-##   └── OmniLight3D        (opzionale)
+## Non ha più parametri @export propri per i valori operativi:
+## tutto arriva da FireConfig tramite activate(). Gli unici @export
+## rimasti sono quelli strutturali (detection, auto_extinguish) che
+## non appartengono alla config condivisa.
+##
+## Flusso di vita:
+##   FireManager._spawn_fire_at()
+##     → zone.activate(id, pos, config)   ← config copiata nei campi locali
+##     → _process() ogni frame
+##     → _extinguish() → emit extinguished(id) → queue_free()
 
 extends Node3D
 
 # ---------------------------------------------------------------------------
-# Parametri export
+# Parametri strutturali (non in FireConfig: sono specifici dell'istanza)
 # ---------------------------------------------------------------------------
-@export var fire_id          : int   = 0
-@export var detection_radius : float = 5.0
-@export var auto_extinguish  : bool  = false
 
-@export var spread_time   : float = 45.0   # [s] crescita intensità 0→1
-@export var spread_radius : float = 16.0   # [m] raggio propagazione figlio a terra
+@export var auto_extinguish : bool = false
 
-const DETECTION_RADIUS_MIN := 10.0
-const DETECTION_RADIUS_MAX := 10.0
-
-# ── Parametri fuoco su pianta (impostati da FireManager.ignite_plant) ────────
-@export var is_plant_fire        : bool   = false
-@export var plant_node           : Node3D = null
-@export var plant_ignition_delay : float  = 10.0  # [s] terra→pianta (default)
-@export var plant_burn_time      : float  = 60.0   # [s] per combustione totale
-@export var plant_spread_radius  : float  = 2.0   # [m] raggio ricerca piante vicine
-
+# ── Parametri fuoco su pianta: impostati da FireManager.ignite_plant ─────────
+## Questi due campi vengono scritti da FireManager PRIMA di activate(),
+## così activate() sa già che tipo di fuoco sta inizializzando.
+var is_plant_fire : bool   = false
+var plant_node    : Node3D = null
 
 # ---------------------------------------------------------------------------
-# Stato interno
+# Parametri operativi (copiati da FireConfig in activate())
 # ---------------------------------------------------------------------------
+## Documentati in fire_config.gd. Non modificare direttamente.
+
+var spread_time           : float = 45.0
+var spread_radius         : float = 16.0
+var _detection_radius_min : float =  4.0
+var _detection_radius_max : float = 10.0
+var plant_ignition_delay  : float = 10.0
+var plant_burn_time       : float = 60.0
+var plant_spread_radius   : float =  2.0
+
+# ---------------------------------------------------------------------------
+# Stato runtime
+# ---------------------------------------------------------------------------
+
+var fire_id       : int   = 0
 var intensity     : float = 0.0
 var _spread_done  : bool  = false
 var _burn_elapsed : float = 0.0
+var _active       : bool  = true
+var _drones_near  : int   = 0
+
+## detection_radius effettivo (interpolato con l'intensità).
+var detection_radius : float = 4.0
 
 ## { Node3D → float }: tempo di contatto accumulato per ogni pianta vicina.
-## Usato da tutti i fuochi (terra e pianta) per propagare alle piante.
 var _plant_contact_time : Dictionary = {}
+var _nearby_plants      : Array      = []
 
-var _nearby_plants : Array = []
+var _mesh_material : StandardMaterial3D = null
 
 # ---------------------------------------------------------------------------
 # Nodi figli
@@ -52,10 +66,6 @@ var _nearby_plants : Array = []
 @onready var _shape     : CollisionShape3D = $DetectionArea/CollisionShape3D
 @onready var _label     : Label3D          = $Label3D
 @onready var _light     : OmniLight3D      = $OmniLight3D
-
-var _active        : bool = true
-var _drones_near   : int  = 0
-var _mesh_material : StandardMaterial3D = null
 
 # ---------------------------------------------------------------------------
 # Segnali
@@ -98,17 +108,14 @@ func _process(delta: float) -> void:
 		_update_intensity_visuals()
 
 	# Propagazione a terra: solo fuochi a terra, una sola volta a saturazione.
-	# I fuochi su piante non generano figli a terra (evita espansione incontrollata).
 	if intensity >= 1.0 and not _spread_done and not is_plant_fire:
 		_spread_done = true
 		_try_propagate()
 
-	# Tracking contatto verso piante vicine.
-	# Attivo per TUTTI i fuochi (terra e pianta): la propagazione pianta→pianta
-	# è libera e usa plant_spread_radius come raggio di ricerca.
+	# Tracking contatto verso piante vicine (tutti i tipi di fuoco).
 	_track_plant_contacts(delta)
 
-	# Countdown combustione (solo fuochi su pianta)
+	# Countdown combustione (solo fuochi su pianta).
 	if is_plant_fire:
 		_burn_elapsed += delta
 		if _burn_elapsed >= plant_burn_time:
@@ -117,10 +124,7 @@ func _process(delta: float) -> void:
 
 	DDS.publish("world/fire_intensity_%d" % fire_id, DDS.DDS_TYPE_FLOAT, intensity)
 
-	# Spegnimento da Python
-	var resolved_id := int(DDS.read("world/fire_resolved"))
-	if resolved_id == fire_id:
-		_extinguish()
+	# Spegnimento da Python (topic dedicato per fire_id + topic generico)
 	var resolved_dedicated := DDS.read("world/fire_resolved_%d" % fire_id)
 	if resolved_dedicated == 1.0 or int(DDS.read("world/fire_resolved")) == fire_id:
 		_extinguish()
@@ -135,11 +139,9 @@ func _track_plant_contacts(delta: float) -> void:
 	if manager == null or not manager.has_method("ignite_plant"):
 		return
 
-	## Il raggio di ricerca dipende dal tipo di fuoco:
-	##   - fuoco a terra:  usa detection_radius (il raggio della DetectionArea)
-	##   - fuoco su pianta: usa plant_spread_radius (impostato da FireManager)
-	##     così la propagazione pianta→pianta è limitata
-	##     alla vicinanza fisica della chioma, non al raggio di detect droni.
+	## Raggio di ricerca:
+	##   fuoco a terra  → detection_radius (raggio effettivo della DetectionArea)
+	##   fuoco su pianta → plant_spread_radius (limita la propagazione chioma→chioma)
 	var search_radius := plant_spread_radius if is_plant_fire else detection_radius
 
 	for plant in _nearby_plants:
@@ -163,11 +165,8 @@ func _try_propagate() -> void:
 	if manager == null or not manager.has_method("spawn_child_fire"):
 		return
 
-	## Cerca la pianta più vicina entro spread_radius.
-	## Se trovata, il figlio si spawna nella sua direzione (fuoco si "avvicina"
-	## al combustibile). Se non ci sono piante vicine, direzione casuale.
-	var best_plant    : Node3D = null
-	var best_dist     : float  = INF
+	var best_plant : Node3D = null
+	var best_dist  : float  = INF
 
 	for plant in _nearby_plants:
 		if not is_instance_valid(plant) or not plant.is_in_group("combustible_plant"):
@@ -179,14 +178,11 @@ func _try_propagate() -> void:
 
 	var offset : Vector3
 	if best_plant != null:
-		## Direzione verso la pianta, distanza random tra 30% e 60% di spread_radius
-		## così il figlio non appare esattamente sulla pianta ma si avvicina.
 		var dir  := (best_plant.global_position - global_position).normalized()
 		var dist := randf_range(spread_radius * 0.3, spread_radius * 0.6)
 		offset    = dir * dist
 		offset.y  = 0.0
 	else:
-		## Nessuna pianta vicina: direzione casuale (comportamento originale)
 		var angle := randf() * TAU
 		var dist  := randf_range(spread_radius * 0.3, spread_radius * 0.5)
 		offset     = Vector3(cos(angle) * dist, 0.0, sin(angle) * dist)
@@ -203,6 +199,8 @@ func _destroy_plant() -> void:
 	if manager and manager.has_method("spawn_ash") and is_instance_valid(plant_node):
 		manager.spawn_ash(plant_node.global_position, plant_node.scale)
 		plant_node.queue_free()
+	if manager and manager.has_method("on_plant_burned"):
+		manager.on_plant_burned(fire_id)
 	_extinguish()
 
 
@@ -228,10 +226,11 @@ func _update_intensity_visuals() -> void:
 		_light.omni_range   = lerp(2.0, 12.0, intensity)
 	if _label:
 		_label.text = "FIRE #%d  %d%%" % [fire_id, int(intensity * 100)]
-	var r = lerp(DETECTION_RADIUS_MIN, DETECTION_RADIUS_MAX, intensity)
-	detection_radius = r
+
+	# Detection radius cresce con l'intensità (usa i valori da config)
+	detection_radius = lerp(_detection_radius_min, _detection_radius_max, intensity)
 	if _shape and _shape.shape is SphereShape3D:
-		(_shape.shape as SphereShape3D).radius = r
+		(_shape.shape as SphereShape3D).radius = detection_radius
 
 
 # ---------------------------------------------------------------------------
@@ -260,6 +259,8 @@ func _publish_fire_event() -> void:
 # ---------------------------------------------------------------------------
 
 func _extinguish() -> void:
+	if not _active:
+		return   # guard: evita doppia chiamata
 	intensity = 0.0
 	_active   = false
 	_plant_contact_time.clear()
@@ -279,24 +280,38 @@ func _extinguish() -> void:
 func is_active() -> bool:
 	return _active
 
-func activate(id: int, pos: Vector3) -> void:
-	fire_id      = id
-	intensity    = 0.0
-	_spread_done = false
+
+func activate(id: int, pos: Vector3, config: FireConfig) -> void:
+	# Copia tutti i parametri operativi dalla config centralizzata
+	spread_time           = config.spread_time
+	spread_radius         = config.spread_radius
+	_detection_radius_min = config.detection_radius_min
+	_detection_radius_max = config.detection_radius_max
+	plant_ignition_delay  = config.plant_ignition_delay
+	plant_burn_time       = config.plant_burn_time
+	plant_spread_radius   = config.plant_spread_radius
+
+	# Inizializzazione stato
+	fire_id       = id
+	intensity     = 0.0
+	_spread_done  = false
 	_burn_elapsed = 0.0
 	_plant_contact_time.clear()
+	_active = true
+
 	_area.set_meta("fire_id", id)
 	global_position = pos
-	_active = true
+
 	DDS.subscribe("world/fire_resolved_%d" % id)
+
 	if _particles:
 		_particles.emitting = true
 	_update_intensity_visuals()
 	if _label:
 		_label.text = "FIRE #%d" % fire_id
 	_publish_fire_event()
-	
-	# NUOVO: Caching delle piante vicine (si fa una volta sola!)
+
+	# Cache delle piante vicine al momento dello spawn
 	var max_search = max(spread_radius, plant_spread_radius)
 	for plant in get_tree().get_nodes_in_group("combustible_plant"):
 		if is_instance_valid(plant) and global_position.distance_to(plant.global_position) <= max_search:

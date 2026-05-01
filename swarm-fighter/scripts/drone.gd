@@ -25,7 +25,7 @@ extends RigidBody3D
 @onready var mini_hud : Label3D = $MiniHUD
 @onready var water_cannon : Node3D = $WaterCannon
 @onready var foam_particles : GPUParticles3D = $WaterCannon/FoamParticles
-@onready var downward_raycast = $DownwardRayCast
+
 
 var _fires_in_range : Array = []  # Array di Area3D nodi fuoco in range
 
@@ -34,7 +34,9 @@ const STATUS_NAMES := {
 	1.0: "EXPLORING",
 	2.0: "MOVING",
 	3.0: "RETURNING",
-	4.0: "SUPPRESSING" # Nuovo stato
+	4.0: "SUPPRESSING",
+	5.0: "→ STATION",   # ← nuovo
+	6.0: "REFUELING",   # ← nuovo
 }
 
 var _prefix  : String
@@ -50,7 +52,7 @@ var _f4      : float = 0.0
 
 var _initial_pos : Vector3
 var _initial_rot : Vector3
-#var _dbg_frame   : int = 0
+
 
 
 func _ready() -> void:
@@ -63,12 +65,6 @@ func _ready() -> void:
 	_initial_pos = global_position
 	_initial_rot = global_rotation
 
-	# I droni non devono scontrarsi fisicamente tra loro: Godot applicherebbe
-	# forze di contatto che spingerebbero i droni cooperanti lontano dal fuoco.
-	# La collision avoidance Python gestisce già la separazione logica in volo.
-	# Layer 2 = droni; mask 1 = solo environment/ground (no drone↔drone contact).
-	#collision_layer = 2
-	#collision_mask  = 1
 
 	DDS.subscribe("%s/f1" % _prefix)
 	DDS.subscribe("%s/f2" % _prefix)
@@ -88,40 +84,23 @@ func _physics_process(_delta: float) -> void:
 	_f3 = DDS.read("%s/f3" % _prefix)
 	_f4 = DDS.read("%s/f4" % _prefix)
 
-	# --- DEBUG: stampa ogni 120 frame (~2s) solo il drone 0 ---
-	#_dbg_frame += 1
-	#if drone_id == 0 and _dbg_frame % 120 == 0:
-	#	print("[drone_0] pos=(%.2f, %.2f, %.2f)  f1=%.3f f2=%.3f f3=%.3f f4=%.3f" % [
-	#		global_position.x, global_position.y, global_position.z,
-	#		_f1, _f2, _f3, _f4
-	#	])
 
 	_apply_motor_force(_f1, _p1)
 	_apply_motor_force(_f2, _p2)
 	_apply_motor_force(_f3, _p3)
 	_apply_motor_force(_f4, _p4)
 	
-	# Costante aerodinamica di drag (da calibrare, prova con 0.05 o 0.1)
+	# Costante aerodinamica di drag 
 	var yaw_factor = 0.5
 	
-	# f1, f2, f3, f4 sono le forze in Newton che ricevi da Python tramite DDS
-	# Calcoliamo la coppia di Yaw (Torque) 
+	# f1, f2, f3, f4 sono le forze in Newton ricevute da Python tramite DDS
+	# Calcola la coppia di Yaw (Torque) 
 	# Assumendo eliche 1 e 3 in un senso, 2 e 4 nell'altro
 	var yaw_torque = (_f1 + _f3) - (_f2 + _f4)
 	yaw_torque *= yaw_factor
 	
 	# Applica il momento torcente lungo l'asse Y LOCALE del drone
-	#apply_torque(basis * Vector3(0, yaw_torque, 0))
-	#apply_torque(Vector3.UP * yaw_torque)
 	apply_torque(basis * Vector3(0, yaw_torque , 0))
-	
-	# RAYCAST — conferma sorvolo diretto
-	var fire_below := false
-	if downward_raycast.is_colliding():
-		var collider = downward_raycast.get_collider()
-		if is_instance_valid(collider):
-			fire_below = true
-	DDS.publish("%s/fire_below" % _prefix, DDS.DDS_TYPE_FLOAT, 1.0 if fire_below else 0.0)
 	
 	# CONO — pubblica il fuoco più vicino nel range (o 0 se nessuno)
 	_publish_spotted_fire()
@@ -213,20 +192,17 @@ func _process(_delta: float) -> void:
 	var status : float = DDS.read("%s/status" % _prefix)
 	mini_hud.text = STATUS_NAMES.get(status, "UNK") + _prefix
 	
-	# 2. Gestisci le particelle d'acqua
+	# 2. Gestiione le particelle d'acqua
 	if status == 4.0: # SUPPRESSING
 		if not foam_particles.emitting:
 			foam_particles.emitting = true
 			
-		# Leggi le coordinate dell'incendio assegnato al drone
+		# Lettura coordinate dell'incendio assegnato al drone
 		var fx = DDS.read("%s/fire_x" % _prefix)
 		var fy = DDS.read("%s/fire_y" % _prefix)
 		var fz = DDS.read("%s/fire_z" % _prefix)
 		var fire_pos = Vector3(fx, fy, fz)
 		
-		# Fai ruotare il "cannone" per guardare verso l'incendio.
-		# Guard: evita look_at degenere se le coordinate DDS non sono ancora arrivate
-		# (fire_pos ≈ origine) o se il cannone è già coincidente col target.
 		if fire_pos.length_squared() > 0.01 and \
 		   fire_pos.distance_squared_to(water_cannon.global_position) > 0.25:
 			water_cannon.look_at(fire_pos, Vector3.UP)

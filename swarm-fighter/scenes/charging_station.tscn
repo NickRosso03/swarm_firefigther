@@ -1,0 +1,75 @@
+[gd_scene format=3 uid="uid://c16ussqrea13y"]
+
+[ext_resource type="Script" uid="uid://11olxsxm81hq" path="res://scripts/charging_station.gd" id="1_e83jx"]
+
+[sub_resource type="StandardMaterial3D" id="StandardMaterial3D_mpp8h"]
+albedo_color = Color(1, 0, 0.011764706, 1)
+
+[sub_resource type="Curve" id="Curve_e83jx"]
+_data = [Vector2(0, 1), 0.0, 0.0, 0, 0, Vector2(0.29535863, 1), 0.0, 0.0, 0, 0, Vector2(0.87763715, 0), 0.0, 0.0, 0, 0]
+point_count = 3
+
+[sub_resource type="CurveTexture" id="CurveTexture_8d62n"]
+curve = SubResource("Curve_e83jx")
+
+[sub_resource type="ParticleProcessMaterial" id="ParticleProcessMaterial_e83jx"]
+emission_shape = 1
+emission_sphere_radius = 6.0
+direction = Vector3(0, 1, 0)
+initial_velocity_min = 1.0
+initial_velocity_max = 3.0
+gravity = Vector3(0, 0, 0)
+scale_curve = SubResource("CurveTexture_8d62n")
+scale_over_velocity_min = 0.049999997
+scale_over_velocity_max = 0.14999999
+
+[sub_resource type="SphereMesh" id="SphereMesh_e83jx"]
+radius = 0.1
+height = 0.2
+
+[node name="ChargingStation" type="Node3D" unique_id=490783586]
+transform = Transform3D(0.6, 0, 0, 0, 0.6, 0, 0, 0, 0.6, 0, 0, 0)
+script = ExtResource("1_e83jx")
+pad_color_active = Color(1, 0.43333334, 0, 1)
+
+[node name="Pad" type="CSGCylinder3D" parent="." unique_id=656591066]
+radius = 6.0
+height = 0.2
+
+[node name="Marker" type="CSGBox3D" parent="." unique_id=1207004941]
+transform = Transform3D(5, 0, 0, 0, 5, 0, 0, 0, 5, 0, -0.3, 0)
+size = Vector3(0.2, 0.121362306, 0.2)
+material = SubResource("StandardMaterial3D_mpp8h")
+
+[node name="Marker4" type="CSGBox3D" parent="Marker" unique_id=982163218]
+transform = Transform3D(-4.371139e-08, 0, 1, 0, 1, 0, -1, 0, -4.371139e-08, -0.1, 0, 0)
+size = Vector3(0.2, 0.2, 0.2)
+material = SubResource("StandardMaterial3D_mpp8h")
+
+[node name="Marker3" type="CSGBox3D" parent="Marker" unique_id=1385108746]
+transform = Transform3D(-4.371139e-08, 0, 1, 0, 1, 0, -1, 0, -4.371139e-08, 0.1, 0, 0)
+size = Vector3(0.2, 0.2, 0.2)
+material = SubResource("StandardMaterial3D_mpp8h")
+
+[node name="Marker2" type="CSGBox3D" parent="Marker" unique_id=151457660]
+transform = Transform3D(1, 0, 0, 0, 1, 0, 0, 0, 1, 0, 0, 0.1)
+size = Vector3(0.2, 0.2, 0.2)
+material = SubResource("StandardMaterial3D_mpp8h")
+
+[node name="Marker5" type="CSGBox3D" parent="Marker" unique_id=1885050814]
+transform = Transform3D(1, 0, 0, 0, 1, 0, 0, 0, 1, 0, 0, -0.1)
+size = Vector3(0.2, 0.2, 0.2)
+material = SubResource("StandardMaterial3D_mpp8h")
+
+[node name="IndicatorLight" type="OmniLight3D" parent="." unique_id=615234633]
+light_color = Color(0, 0.9764706, 0.27058825, 1)
+light_energy = 30.0
+light_size = 5.0
+omni_range = 10.0
+
+[node name="RechargeParticles" type="GPUParticles3D" parent="." unique_id=1865109228]
+amount = 50
+lifetime = 1.5
+randomness = 1.0
+process_material = SubResource("ParticleProcessMaterial_e83jx")
+draw_pass_1 = SubResource("SphereMesh_e83jx")

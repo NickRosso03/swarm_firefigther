@@ -77,7 +77,7 @@ func _apply_look(relative: Vector2) -> void:
 	rotation = euler_rot
 
 func _update_mouse_capture() -> void:
-	# Con il tasto destro cattura il cursore (comportamento classico FPS)
+	# Con il tasto destro cattura il cursore 
 	# Con Alt lascia il cursore visibile — più comodo sul trackpad
 	if _mouse_active:
 		Input.set_mouse_mode(Input.MOUSE_MODE_CAPTURED)

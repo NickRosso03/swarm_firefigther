@@ -1,0 +1,8 @@
+[gd_resource type="Resource" script_class="FireConfig" format=3 uid="uid://c0vfpcj06i8tn"]
+
+[ext_resource type="Script" uid="uid://dkgdpwsmja72s" path="res://scripts/fire_config.gd" id="1_1d1xs"]
+
+[resource]
+script = ExtResource("1_1d1xs")
+plant_burn_time = 90.0
+metadata/_custom_type_script = "uid://dkgdpwsmja72s"

@@ -1,5 +1,5 @@
 """
-Sistema anticollisione basato su Potential Fields (Khatib).
+Sistema anticollisione basato su Potential Fields 
 
     Frep(q) = krep * (1/rho - 1/rho0) * (1/rho²) * (q - q_obs)/rho    se rho ≤ rho0
     Frep(q) = 0                                                       se rho > rho0
@@ -14,22 +14,6 @@ la distanza scenda sotto D_SAFE.
 Opera esclusivamente nel piano orizzontale XZ (coordinate Godot).
 La quota Y è gestita dal controller di quota separato e non viene perturbata.
 
-========================================================================
-SCHEMA DI INTEGRAZIONE (chiamato in _control_and_publish di DroneAgent)
-========================================================================
-
-  FSM → set_target(x, y)               ← setpoint "nominale" da virtual robot
-               ↓
-  CollisionAvoidance.compute()         ← somma contributi repulsivi (Khatib + damp)
-               ↓
-  (dx_rep, dz_rep) offset XZ           ← vettore risultante, clampato a max_offset
-               ↓
-  ctrl.x_target += dx_rep              ← perturbazione temporanea (un solo frame)
-  ctrl.y_target += dz_rep              ← la FSM riscrive i target al frame successivo
-               ↓
-  ctrl.evaluate()                      ← PID vede il setpoint già perturbato
-
-
 """
 
 import math
@@ -41,22 +25,24 @@ import math
 
 # Distanza minima di sicurezza [m].
 # Sotto questo valore la magnitudine della forza è clampata (evita 1/rho²→∞).
-D_SAFE = 5.0
+D_SAFE = 4.0
 
 # Raggio di influenza [m].
 # Oltre questa distanza la forza repulsiva è esattamente zero.
-D_INFLUENCE = 14.0
+D_INFLUENCE = 16.0
 
 # Guadagno repulsivo statico (termine Khatib).
-K_REP = 450.0
+K_REP = 350.0
 
 # Guadagno del termine derivativo (velocity damping) [m²/s → m].
 # Produce un offset aggiuntivo proporzionale alla velocità radiale di
 # avvicinamento; si attiva solo quando i droni si stanno avvicinando.
-K_DAMP = 150.0
+K_DAMP = 300.0
 
 # Offset massimo applicabile al setpoint [m].
-MAX_OFFSET = 12.0
+MAX_OFFSET = 25.0
+
+MAX_NEIGHBORS = 4
 
 
 # ---------------------------------------------------------------------------
@@ -74,27 +60,27 @@ class CollisionAvoidance:
                  d_influence: float = D_INFLUENCE,
                  k_rep: float       = K_REP,
                  k_damp: float      = K_DAMP,
-                 max_offset: float  = MAX_OFFSET):
+                 max_offset: float  = MAX_OFFSET,
+                 max_neighbors: int = MAX_NEIGHBORS):
         """
         :param d_safe:      distanza di sicurezza — sotto questa la forza è massima [m]
         :param d_influence: raggio di influenza — oltre questo la forza è zero [m]
-        :param k_rep:       guadagno repulsivo statico (Khatib)
+        :param k_rep:       guadagno repulsivo statico 
         :param k_damp:      guadagno del termine derivativo (velocity damping)
         :param max_offset:  clamp del vettore offset totale [m]
         """
         if d_safe >= d_influence:
             raise ValueError("d_safe deve essere < d_influence")
 
-        self.d_safe      = d_safe
-        self.d_influence = d_influence
-        self.k_rep       = k_rep
-        self.k_damp      = k_damp
-        self.max_offset  = max_offset
+        self.d_safe        = d_safe
+        self.d_influence   = d_influence
+        self.k_rep         = k_rep
+        self.k_damp        = k_damp
+        self.max_offset    = max_offset
+        self.max_neighbors = max_neighbors
 
-        #Stato del filtro per ammorbidire l'output
         self.smooth_dx = 0.0
         self.smooth_dz = 0.0
-
     # ------------------------------------------------------------------
     def compute(self, my_pos: tuple, my_vel: tuple, swarm: dict) -> tuple:
         """
@@ -127,50 +113,55 @@ class CollisionAvoidance:
         mx, mz   = my_pos
         mvx, mvz = my_vel
 
+        # 1. Raccogliamo i vicini e filtriamo quelli fuori dal raggio
+        valid_neighbors = []
+        d_influence_sq = self.d_influence * self.d_influence
+
         for drone_id, info in swarm.items():
             pos = info.get("pos")
             if pos is None:
                 continue
 
-            ox, oz = pos[0], pos[2]     # XZ Godot; pos[1] è la quota Y (ignorata)
-
-            # Vettore "da j verso me" (direzione di allontanamento)
+            ox, oz = pos[0], pos[2]
             dx = mx - ox
             dz = mz - oz
-            rho = math.sqrt(dx * dx + dz * dz)
+            rho_sq = dx * dx + dz * dz
 
-            # Fuori dal raggio di influenza → contributo nullo
-            if rho >= self.d_influence:
+            # Scartiamo subito chi è fuori dal raggio (ottimizzazione senza math.sqrt)
+            if rho_sq >= d_influence_sq:
                 continue
 
-            # Droni praticamente coincidenti (degenerato): spinta arbitraria fissa
-            if rho < 1e-3:
+            # Droni degenerati (quasi coincidenti)
+            if rho_sq < 1e-6:
                 total_x += self.max_offset * 0.1
                 continue
 
-            # --rho_eff: clamp a d_safe per evitare la singolarità 1/rho²→∞
+            # Se è dentro il raggio, calcoliamo la radice vera e lo aggiungiamo alla lista
+            rho = math.sqrt(rho_sq)
+            valid_neighbors.append((rho, dx, dz, info))
+
+        # 2. Ordiniamo la lista per distanza crescente (il primo elemento della tupla è rho)
+        valid_neighbors.sort(key=lambda x: x[0])
+
+        # 3. Applichiamo la repulsione SOLO sui K droni più vicini
+        for rho, dx, dz, info in valid_neighbors[:self.max_neighbors]:
             rho_eff  = max(rho, self.d_safe)
             rho_eff2 = rho_eff * rho_eff
 
-            # --Termine statico Khatib 
+            # -- Termine statico Khatib 
             mag = (self.k_rep
                    * (1.0 / rho_eff - 1.0 / self.d_influence)
                    * (1.0 / rho_eff2))
 
-            # --Termine derivativo (velocity damping) --
-            # v_approach: componente radiale di avvicinamento della velocità
-            # relativa. d(rho)/dt = dot(û_away, Δv) → v_approach = -d(rho)/dt.
-            # Aggiunto solo quando ci stiamo avvicinando (v_approach > 0).
+            # -- Termine derivativo (velocity damping)
             vel_j = info.get("vel")
             if vel_j is not None and self.k_damp > 0.0:
                 jvx, jvz  = vel_j[0], vel_j[1]
                 v_approach = -((dx * (mvx - jvx) + dz * (mvz - jvz)) / rho)
-                if v_approach > 0.0:
+                if v_approach > 0.3:
                     mag += self.k_damp * v_approach / rho_eff2
 
-            # -- Proiezione sul versore unitario --
-            # Direzione calcolata su rho reale (non rho_eff): punta sempre
-            # esattamente via da j anche quando la magnitudine è saturata.
+            # -- Proiezione sul versore unitario
             inv_rho = 1.0 / rho
             total_x += mag * dx * inv_rho
             total_z += mag * dz * inv_rho
@@ -183,14 +174,12 @@ class CollisionAvoidance:
             total_z *= scale
 
         # Filtro Esponenziale  
-        # alpha = 0.45 significa che il target assorbe il 45% del nuovo calcolo 
-        # e mantiene il 55% del vecchio. Ammorbidisce i picchi.
         alpha = 0.45
         self.smooth_dx += alpha * (total_x - self.smooth_dx)
         self.smooth_dz += alpha * (total_z - self.smooth_dz)
 
         return self.smooth_dx, self.smooth_dz
-
+    
     def reset(self) -> None:
         """Azzera lo stato del filtro. Chiamare alle transizioni FSM rilevanti."""
         self.smooth_dx = 0.0

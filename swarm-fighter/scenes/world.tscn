@@ -2,8 +2,10 @@
 
 [ext_resource type="Script" uid="uid://dxclsknsjeov5" path="res://scripts/world.gd" id="1_k0juu"]
 [ext_resource type="PackedScene" uid="uid://bbmj6rjyosvs4" path="res://scenes/drone.tscn" id="2_71j4m"]
+[ext_resource type="PackedScene" uid="uid://c16ussqrea13y" path="res://scenes/charging_station.tscn" id="3_pm21f"]
 [ext_resource type="Script" uid="uid://cplsyfk1a68ac" path="res://scripts/fire_manager.gd" id="3_qfnet"]
 [ext_resource type="PackedScene" uid="uid://c7l6b4k17k1an" path="res://scenes/fire_zone.tscn" id="4_i7141"]
+[ext_resource type="Resource" uid="uid://c0vfpcj06i8tn" path="res://fire_config.tres" id="5_2lf6f"]
 [ext_resource type="Script" uid="uid://nysg6ufsgtc3" path="res://scripts/free_camera.gd" id="5_71j4m"]
 [ext_resource type="Script" uid="uid://ohkwaj2umy8t" path="res://scripts/obstacle_spawner.gd" id="6_i7141"]
 [ext_resource type="Script" uid="uid://dle752icq53hx" path="res://scripts/obstacle_config.gd" id="7_w7kh3"]
@@ -136,7 +138,9 @@ metadata/_custom_type_script = "uid://dle752icq53hx"
 [node name="World" type="Node3D" unique_id=59395442]
 script = ExtResource("1_k0juu")
 drone_scene = ExtResource("2_71j4m")
+n_drones = 8
 start_altitude = 1.0
+charging_station_scene = ExtResource("3_pm21f")
 
 [node name="WorldEnvironment" type="WorldEnvironment" parent="." unique_id=1634695215]
 environment = SubResource("Environment_4mrxx")
@@ -157,6 +161,7 @@ shape = SubResource("WorldBoundaryShape3D_e3hyu")
 
 [node name="FireManager" type="Node3D" parent="." unique_id=1933600818]
 script = ExtResource("3_qfnet")
+config = ExtResource("5_2lf6f")
 fire_zone_scene = ExtResource("4_i7141")
 max_ground_fires = 5
 
@@ -188,4 +193,4 @@ offset_bottom = 50.0
 script = ExtResource("6_i7141")
 obstacle_configs = Array[ExtResource("7_w7kh3")]([SubResource("Resource_lakw3"), SubResource("Resource_pm21f"), SubResource("Resource_2lf6f"), SubResource("Resource_7iits"), SubResource("Resource_oo54l"), SubResource("Resource_kpybi"), SubResource("Resource_ctatt"), SubResource("Resource_xgqkh"), SubResource("Resource_munwf"), SubResource("Resource_ts3gi"), SubResource("Resource_0nbtd")])
 area_half = 90.0
-min_dist_from_center = 1.0
+station_exclusion_radius = 12.0

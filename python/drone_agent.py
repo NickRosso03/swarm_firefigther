@@ -75,7 +75,19 @@ FIRE_VMAX      = 7.0    # [m/s]  velocità di avvicinamento al fuoco
 FIRE_ACC       = 2.0    # [m/s²] accelerazione
 FIRE_DEC       = 2.0    # [m/s²] decelerazione
 
-N_DRONES        = 5
+# ---------------------------------------------------------------------------
+# Parametri acqua / ricarica
+# ---------------------------------------------------------------------------
+WATER_MAX          = 100.0   # unità arbitrarie
+WATER_MIN_THRESH   =  10.0   # sotto questa soglia non intraprende nuove soppressioni
+WATER_CONSUME_RATE =   1.0   # unità/s consumate durante SUPPRESSING
+RECHARGE_RATE      =  10.0   # unità/s durante REFUELING
+STATION_LAND_ALT   =   0.2  # [m] quota "a terra" per fine atterraggio sulla stazione
+STATION_RADIUS     =   2.5   # [m] distanza massima per considerarsi sopra la stazione
+
+
+#----------------------------------------------------------------------------
+N_DRONES        = 8
 DDS_HOST        = '127.0.0.1'
 DDS_PORT        = 4444
 
@@ -91,6 +103,8 @@ class StateCode:
     MOVING      = 2.0
     SUPPRESSING = 4.0
     RETURNING   = 3.0
+    GOING_TO_STATION = 5.0   # ← nuovo
+    REFUELING   = 6.0   # ← nuovo
 
 class State:
     IDLE        = "IDLE"
@@ -100,10 +114,12 @@ class State:
     MOVING      = "MOVING"
     SUPPRESSING = "SUPPRESSING"
     RETURNING   = "RETURNING"
+    GOING_TO_STATION = "GOING_TO_STATION"   # ← nuovo
+    REFUELING        = "REFUELING"           # ← nuovo
 
 FREE_STATES = {State.EXPLORING, State.RETURNING}
 
-AVOIDANCE_STATES = {State.EXPLORING, State.MOVING, State.RETURNING}
+AVOIDANCE_STATES = {State.EXPLORING, State.MOVING, State.RETURNING, State.GOING_TO_STATION}
 
 
 class DroneAgent:
@@ -133,7 +149,8 @@ class DroneAgent:
         self.target_fire    = None
         self.fire_id        = None
         self._suppress_t    = 0.0
-        self._hover_timer   = 0.0 
+        self._hover_timer   = 0.0
+        self._tick_count    = 0 
         
         # set accumulativo degli id fuoco risolti: usato perché Godot chiama
         # DDS.clear("world/fire_resolved") subito dopo lo spegnimento.
@@ -158,6 +175,13 @@ class DroneAgent:
         self._standoff_x = 0.0
         self._standoff_z = 0.0
 
+        # Acqua / ricarica
+        self.water_level        = WATER_MAX
+        self._station_pos       = None          # [x, z] ricevuto via DDS da Godot
+        self._refuel_timer      = 0.0
+
+        self._active_drone_ids  = set(range(self.n))   # tutti attivi all'avvio
+
         # Quota di decollo per il controller
         self.ctrl.set_target(z=TAKEOFF_ALT)
 
@@ -180,6 +204,8 @@ class DroneAgent:
             tick = self.dds.wait(f"{self._p}/tick")
             delta_t = self.timer.elapsed()
 
+            self._tick_count += 1
+
             if delta_t <= 0:
                 delta_t = 1.0 / 60.0
             elif delta_t > 0.1:
@@ -190,20 +216,16 @@ class DroneAgent:
 
             _dbg += 1
             
-            # log ogni 2s — solo drone 0.
+            # log ogni 2.0s — solo drone 0.
             if self.id == 0:
                 if _dbg % 120 == 0:
                     state_str = f"[{self.state}]".ljust(15)
-                    v_horiz   = math.sqrt(self.vx**2 + self.vy**2)
-                    v_tgt     = math.sqrt(self.ctrl.vx_target**2 + self.ctrl.vy_target**2)
                     self.log.info(
-                        f"{state_str} | "
-                        f"v tgt:{v_tgt:4.2f} cur:{v_horiz:4.2f} m/s"
+                        f"{state_str}"# | "
                     )
 
             # 2. Aggiorna stato swarm
             self._update_swarm()
-
 
             # 3. FSM
             self._update_fsm(delta_t)
@@ -231,7 +253,8 @@ class DroneAgent:
             f"{p}/fire_spotted",
             f"{p}/fire_spotted_id",
             f"{p}/fire_spotted_x", f"{p}/fire_spotted_y", f"{p}/fire_spotted_z",
-            f"{p}/fire_below",
+            f"world/station_{self.id}_pos_x",
+            f"world/station_{self.id}_pos_z",
         ]
 
         swarm_vars = []
@@ -249,6 +272,7 @@ class DroneAgent:
                     f"drone_{i}/fire_spotted_z",
                     f"drone_{i}/fire_id",
                     f"drone_{i}/fire_extinguished",  
+                    f"drone_{i}/is_active",
                 ]
 
         self.dds.subscribe(own_vars + swarm_vars )
@@ -271,6 +295,11 @@ class DroneAgent:
         self.wx = self.dds.read(f"{p}/WX") or 0.0
         self.wy = self.dds.read(f"{p}/WY") or 0.0
         self.wz = self.dds.read(f"{p}/WZ") or 0.0
+        
+        sx = self.dds.read(f"world/station_{self.id}_pos_x")
+        sz = self.dds.read(f"world/station_{self.id}_pos_z")
+        if sx is not None and sz is not None:
+            self._station_pos = [sx, sz]
 
     def _update_swarm(self):
         with self._swarm_lock:
@@ -294,6 +323,19 @@ class DroneAgent:
                 ext_id = self.dds.read(f"drone_{i}/fire_extinguished") or 0.0
                 if ext_id != 0.0:
                     self._resolved_fire_ids.add(ext_id)
+            
+            # Aggiorna set droni attivi e triggera replanning se cambia
+            new_active = {self.id}   # io sono sempre nel set
+            for i in range(self.n):
+                if i == self.id:
+                    continue
+                val = self.dds.read(f"drone_{i}/is_active")
+                if val is None or val == 1.0:   # None = non ancora pubblicato → assumi attivo
+                    new_active.add(i)
+
+            if new_active != self._active_drone_ids:
+                self._active_drone_ids = new_active
+                self._replan_coverage()
 
     # =======================================================================
     # FSM
@@ -314,14 +356,17 @@ class DroneAgent:
         elif self.state == State.RETURNING:
             self._do_returning(dt)
             self._check_sensors()
+        elif self.state == State.GOING_TO_STATION:    # ← nuovo
+            self._do_going_to_station(dt)
+        elif self.state == State.REFUELING:           # ← nuovo
+            self._do_refueling(dt)   
 
 
     def _do_takeoff(self, dt: float):
         self.ctrl.set_target(z=TAKEOFF_ALT)
         if abs(self.y - TAKEOFF_ALT) < 0.5:
-            #self.log.info(f"Quota raggiunta ({self.y:.1f} m). Hover di stabilizzazione.")
             self.ctrl.set_target(x=self.x, y=self.z)
-            self.ctrl.reset_velocity_integrators()  # evita windup durante salita
+            self.ctrl.reset_velocity_integrators()
             self._hover_timer = 0.0
             self.state = State.HOVERING
 
@@ -339,6 +384,10 @@ class DroneAgent:
     def _do_exploring(self, dt: float):
         (x_tgt, z_tgt) = self._traj.evaluate(dt, (self.x, self.z))
         self.ctrl.set_target(x=x_tgt, y=z_tgt, yaw=self._traj.heading)
+        
+        if self.water_level <= WATER_MIN_THRESH:
+            self._start_going_to_station()
+            return
 
     def _do_moving(self, dt: float):
         if self.target_fire is None:
@@ -359,7 +408,8 @@ class DroneAgent:
         self.ctrl.set_target(x=x_tgt, y=z_tgt, yaw=self._fire_traj.heading)
     
         # Selettore di arrivo molto stretto, il drone è arrivato in posizione
-        if dist_to_standoff < 1.5 :#or self._fire_traj.is_done:  
+        v_horiz = math.sqrt(self.vx**2 + self.vz**2)          
+        if dist_to_standoff < 2.0 and self._fire_traj.is_done and v_horiz < 1.5:  
             self._start_suppressing()
 
 
@@ -371,7 +421,11 @@ class DroneAgent:
             return
     
         fx, fy, fz = self.target_fire
-        self.ctrl.set_target(x=self._standoff_x, y=self._standoff_z)
+        
+        target_yaw = math.atan2(fx - self._standoff_x, fz - self._standoff_z)
+        self.ctrl.set_target(x=self._standoff_x, y=self._standoff_z, yaw=target_yaw)
+
+        self._avoidance.reset()
 
     
         intensity = self._get_fire_intensity(self.fire_id)
@@ -383,15 +437,24 @@ class DroneAgent:
                         n_suppressing += 1
     
         self._suppress_t += dt
+        
+        self.water_level = max(0.0, self.water_level - WATER_CONSUME_RATE * dt)
+        if self.water_level == 0.0:
+            # Acqua esaurita durante soppressione — abbandona
+            self.target_fire = None
+            self.fire_id     = None
+            self._start_going_to_station()
+            return
+        
         if self._suppress_t >= self._suppress_time_for(intensity, n_suppressing):
             
-            # 1. Dice a Godot di spegnere visivamente il fuoco
+            # Dice a Godot di spegnere visivamente il fuoco
             self.dds.publish(f"world/fire_resolved_{int(self.fire_id)}", 1.0)
             
-            # 2. MESSAGGIO RADIO ALLO SCIAME: "Ho spento questo ID"
+            # MESSAGGIO RADIO ALLO SCIAME: "Ho spento questo ID"
             self.dds.publish(f"{self._p}/fire_extinguished", self.fire_id)
             
-            # 3. Lo aggiunge alla propria memoria
+            # Lo aggiunge alla propria memoria
             self._resolved_fire_ids.add(self.fire_id)
             
             self.target_fire = None
@@ -401,13 +464,9 @@ class DroneAgent:
     def _start_suppressing(self):
         """Inizializza la soppressione."""
         self._suppress_t = 0.0
+
+        self.ctrl.set_target(x=self._standoff_x, y=self._standoff_z)
         self.ctrl.reset_velocity_integrators()
-        
-        # Una volta in posizione, ruota per guardare il centro del fuoco
-        fx, _, fz = self.target_fire
-        dx = fx - self.x
-        dz = fz - self.z
-        self.ctrl.set_yaw_direct(math.atan2(dx, dz))
         
         self._avoidance.reset() # Disabilita l'EMA anticollisione
         
@@ -420,6 +479,7 @@ class DroneAgent:
        # self._traj.start((self.ctrl.x_target, self.ctrl.y_target), start_idx=nearest)
         self._traj.start((self.x, self.z), start_idx=nearest)
         self.ctrl.set_yaw_direct(self._traj.heading)
+        self.ctrl.reset_velocity_integrators()
         self._avoidance.reset() 
         self.state = State.RETURNING
 
@@ -432,7 +492,68 @@ class DroneAgent:
             self._avoidance.reset()
             self.state = State.EXPLORING
     
-    
+    # =======================================================================
+    # Ricarica e Gestione Stazione
+    # =======================================================================
+
+    def _start_going_to_station(self):
+        if self._station_pos is None:
+            return
+        self.target_fire = None
+        self.fire_id     = None
+        sx, sz = self._station_pos
+        self._fire_traj.start_motion(
+            (self.ctrl.x_target, self.ctrl.y_target),
+            (sx, sz)
+        )
+        self.ctrl.reset_velocity_integrators()
+        self._avoidance.reset()
+        self.state = State.GOING_TO_STATION
+
+
+    def _do_going_to_station(self, dt: float):
+        sx, sz = self._station_pos
+        x_tgt, z_tgt = self._fire_traj.evaluate(dt)
+        self.ctrl.set_target(x=x_tgt, y=z_tgt, yaw=self._fire_traj.heading)
+        dist    = self._dist2d([self.x, self.z], [sx, sz])
+        v_horiz = math.sqrt(self.vx**2 + self.vz**2)
+        if dist < STATION_RADIUS and self._fire_traj.is_done and v_horiz < 1.0:
+            self.ctrl.set_target(x=sx, y=sz)
+            self.ctrl.reset_velocity_integrators()
+            self.ctrl.reset_altitude_integrators()
+            self._avoidance.reset()
+            self.state = State.REFUELING
+
+    def _do_refueling(self, dt: float):
+        sx, sz = self._station_pos
+        # Mantiene x e z fissi sulla stazione
+        self.ctrl.set_target(x=sx, y=sz)
+        
+        # 1. RAMP-DOWN: Abbassiamo il setpoint di quota gradualmente
+        DESCENT_SPEED = 3.0  # m/s (regola questo valore per discese più o meno dolci)
+        current_z_target = self.ctrl.z_target
+        
+        # Finché il target del controller è sopra la quota di atterraggio, lo abbassiamo
+        if current_z_target > STATION_LAND_ALT:
+            new_z_target = max(STATION_LAND_ALT, current_z_target - DESCENT_SPEED * dt)
+            self.ctrl.set_target(z=new_z_target)
+
+        # 2. CONTROLLO FISICO: Il drone è fisicamente arrivato a terra?
+        if self.y > STATION_LAND_ALT + 0.3:
+            # Continua ad aspettare che scenda
+            pass 
+        else:
+            # È a terra (o quasi), procediamo con la ricarica
+            self.water_level = min(WATER_MAX, self.water_level + RECHARGE_RATE * dt)
+            
+            # Ricarica completata
+            if self.water_level >= WATER_MAX:
+                self.ctrl.reset_velocity_integrators()
+                self.ctrl.reset_altitude_integrators()
+                self._avoidance.reset()
+                # Deleghiamo la risalita al normale stato di decollo
+                self.state = State.TAKEOFF
+        
     def _is_fire_valid(self, fire_id: float, fire_pos: list = None) -> bool:
         """Determina se un fuoco è valido usando la conoscenza condivisa dello sciame."""
         if fire_id is None or fire_id == 0.0:
@@ -486,6 +607,9 @@ class DroneAgent:
     def _should_respond(self, fire_id: float, fire_pos: list) -> bool:
         if self.state not in FREE_STATES:
             return False
+        
+        if self.water_level < WATER_MIN_THRESH:
+            return False
 
         intensity = self._get_fire_intensity(fire_id)
         if intensity < INTENSITY_MIN_THRESHOLD:
@@ -522,6 +646,10 @@ class DroneAgent:
     def _check_sensors(self):
         """Legge fire_spotted proprio + quello dei compagni."""
         # Sensore proprio
+        # I droni valutano i sensori solo 1 volta ogni 10 frame, in momenti diversi
+        if self._tick_count % 10 != self.id:
+            return
+        
         if self.dds.read(f"{self._p}/fire_spotted") == 1.0:
             fire_id = self.dds.read(f"{self._p}/fire_spotted_id") or 0.0
             if fire_id != 0.0:
@@ -562,6 +690,8 @@ class DroneAgent:
             dx = self._standoff_x - self.x
             dz = self._standoff_z - self.z
             self.ctrl.set_yaw_direct(math.atan2(dx, dz))
+
+            self.ctrl.reset_velocity_integrators()
             
             # Inizia il movimento diretto verso il posto assegnato (non verso il centro!)
             self._fire_traj.start_motion(
@@ -576,31 +706,39 @@ class DroneAgent:
     def _control_and_publish(self, dt: float):
         altitude_only = self.state == State.TAKEOFF
 
-        dx, dz = 0.0, 0.0  
+        dx, dz = 0.0, 0.0
 
         if self.state in AVOIDANCE_STATES:
             with self._swarm_lock:
-                snap = self._swarm
-            dx,dz  = self._avoidance.compute(
+                snap = dict(self._swarm)          # copia reale, non alias
+            dx, dz = self._avoidance.compute(
                 my_pos=(self.x, self.z),
                 my_vel=(self.vx, self.vz),
                 swarm=snap,
             )
-        
-        self.ctrl.x_target += dx
+
+        # --- FIX: applica l'offset solo per questa evaluate ---
+        base_x = self.ctrl.x_target          # salva il target pulito
+        base_y = self.ctrl.y_target
+
+        self.ctrl.x_target += dx             # offset temporaneo
         self.ctrl.y_target += dz
 
-
         f1, f2, f3, f4 = self.ctrl.evaluate(
-            delta_t    = dt,
+            delta_t=dt,
             z=self.y,  vz=self.vy,
             x=self.x,  vx=self.vx,
             y=self.z,  vy=self.vz,
-            roll=self.tz,  roll_rate=self.wz,
-            pitch=self.tx, pitch_rate=self.wx,
-            yaw=self.ty,   yaw_rate=self.wy,
-            altitude_only = altitude_only,
+            roll=self.tz,   roll_rate=self.wz,
+            pitch=self.tx,  pitch_rate=self.wx,
+            yaw=self.ty,    yaw_rate=self.wy,
+            altitude_only=altitude_only,
         )
+
+        self.ctrl.x_target = base_x          # ripristina il target pulito
+        self.ctrl.y_target = base_y
+        # ------------------------------------------------------
+
         p = self._p
         self.dds.publish(f"{p}/f1", f1)
         self.dds.publish(f"{p}/f2", f2)
@@ -631,6 +769,8 @@ class DroneAgent:
             State.MOVING:      StateCode.MOVING,
             State.SUPPRESSING: StateCode.SUPPRESSING,
             State.RETURNING:   StateCode.RETURNING,
+            State.GOING_TO_STATION: StateCode.GOING_TO_STATION,
+            State.REFUELING:        StateCode.REFUELING,
         }.get(self.state, 0.0)
         
         self.dds.publish(f"{p}/status", sc)
@@ -648,6 +788,16 @@ class DroneAgent:
 
         self.dds.publish(f"{p}/tgt_x", self.ctrl.x_target)
         self.dds.publish(f"{p}/tgt_z", self.ctrl.y_target)
+
+        self.dds.publish(f"{self._p}/water_level", self.water_level)
+
+        is_active = self.state not in (State.GOING_TO_STATION, State.REFUELING)
+        self.dds.publish(f"{self._p}/is_active", 1.0 if is_active else 0.0)
+
+        # --- NUOVA LOGICA ROBUSTA PER L'ANIMAZIONE ---
+        # È a 1.0 solo se lo stato è REFUELING e il drone è fisicamente a terra
+        is_refueling_now = 1.0 if (self.state == State.REFUELING and self.y <= STATION_LAND_ALT + 0.3) else 0.0
+        self.dds.publish(f"{self._p}/refueling", is_refueling_now)
 
     # =======================================================================
     # Utility
@@ -673,6 +823,24 @@ class DroneAgent:
         sx = fx + FIRE_STANDOFF_RADIUS * math.cos(angle)
         sz = fz + FIRE_STANDOFF_RADIUS * math.sin(angle)
         return sx, sz
+
+    def _replan_coverage(self):
+        """Ricalcola il settore di perlustrazione basandosi sui droni attivi."""
+        active_sorted = sorted(self._active_drone_ids)
+        if self.id not in active_sorted:
+            return   # io sono in ricarica, niente da ricalcolare
+        my_index  = active_sorted.index(self.id)
+        n_active  = len(active_sorted)
+        self.waypoints = CoveragePlanner.get_sector(
+            my_index, n_active, area_size=AREA_SIZE, altitude=TAKEOFF_ALT
+        )
+        # Se sto già esplorando, riparte dal waypoint più vicino nel nuovo settore
+        if self.state in (State.EXPLORING, State.RETURNING):
+            nearest = self._nearest_waypoint()
+            self._traj.load(self.waypoints)
+            self._traj.start((self.x, self.z), start_idx=nearest)
+            #self.log.info(f"Replanning: {n_active} droni attivi, idx={my_index}, "
+            #            f"wp più vicino #{nearest}")
     
 
     @staticmethod

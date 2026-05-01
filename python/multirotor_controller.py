@@ -15,21 +15,20 @@ class MultirotorController:
         self.z_control  = P_Controller(kp=1.5, sat=2.0)
         self.vz_control = PID_Controller(kp=4.0, ki=0.3, kd=0.1, sat=5.0)
 
-        # ── POSIZIONE XY ───────────────────────────────────────────────────────
-        # kp=0.4: può essere alzato rispetto al precedente 0.25 perché il loop
+        # -- POSIZIONE XY ------------------------------------------------------─
         self.x_control  = P_Controller(kp=0.6, sat=10.0)
         self.y_control  = P_Controller(kp=0.6, sat=10.0)
 
-        # ── VELOCITÀ -> TILT ────────────────────────────────────────────────────
-        # L'anti-windup del PI_Controller congela l'integrale a saturazione
-        self.vx_control = PID_Controller(kp=0.3, ki=0.1, kd=0.2, sat=math.radians(35))
-        self.vy_control = PID_Controller(kp=0.3, ki=0.1, kd=0.2, sat=math.radians(35))
+        # -- VELOCITÀ -> TILT ----------------------------------------------------
+    
+        self.vx_control = PID_Controller(kp=0.3, ki=0.05, kd=0.3, sat=math.radians(35))
+        self.vy_control = PID_Controller(kp=0.3, ki=0.05, kd=0.3, sat=math.radians(35))
 
-        # ── ATTITUDE (angolo -> rate) ────────────────────────────────────────────
-        self.roll_control  = P_Controller(kp=2.4, sat=1.5)
-        self.pitch_control = P_Controller(kp=2.4, sat=1.5)
+        # -- ATTITUDE (angolo -> rate) --------------------------------------------
+        self.roll_control  = P_Controller(kp=1.0, sat=1.5)
+        self.pitch_control = P_Controller(kp=1.0, sat=1.5)
 
-        # ── RATE (rate -> coppia motori) ────────────────────────────────────────
+        # -- RATE (rate -> coppia motori) ----------------------------------------
         self.w_pitch_control = PID_Controller(kp=0.25, ki=0.1, kd=0.025, sat=0.6)
         self.w_roll_control  = PID_Controller(kp=0.25, ki=0.1, kd=0.025, sat=0.6)
         
@@ -58,7 +57,17 @@ class MultirotorController:
         """
         self.vx_control.reset()
         self.vy_control.reset()
-
+        self.w_roll_control.reset()
+        self.w_pitch_control.reset()
+        
+    # In MultirotorController — aggiungi questo metodo
+    def reset_altitude_integrators(self) -> None:
+        """Azzera gli integratori del loop Z. 
+        Da chiamare a ogni transizione che cambia bruscamente il z_target
+        (tipicamente REFUELING → TAKEOFF).
+        """
+        self.vz_control.reset()
+        
 
     def evaluate(self,
                  delta_t: float,
@@ -83,7 +92,7 @@ class MultirotorController:
             self.w_roll_control.reset()
             self.w_pitch_control.reset()
             self.w_yaw_control.reset()
-            self.vx_control.reset()   # evita windup durante salita verticale
+            self.vx_control.reset()   
             self.vy_control.reset()
             return f_base, f_base, f_base, f_base
 
@@ -97,7 +106,7 @@ class MultirotorController:
 
         # ATTITUDE TARGET nel frame mondo — i controller P lavorano direttamente
         # sugli errori di velocità mondiali, senza rotazione di frame sull'ingresso.
-        # La trasformazione mondo->drone viene applicata SOLO qui, all'ultimo stadio,
+        # La trasformazione mondo->drone viene applicata solo qui, all'ultimo stadio,
         # così i due canali X/Z mondo restano disaccoppiati durante le virate.
         tilt_x_world = -self.vx_control.evaluate(delta_t, err_vx_glob)
         tilt_z_world =  self.vy_control.evaluate(delta_t, err_vy_glob)
@@ -106,14 +115,14 @@ class MultirotorController:
         self.roll_target  =  tilt_x_world * math.cos(yaw) + tilt_z_world * math.sin(yaw)
         self.pitch_target = -tilt_x_world * math.sin(yaw) + tilt_z_world * math.cos(yaw)
 
-        # ATTITUDE RATE CONTROL (incluso YAW)
+        # ATTITUDE RATE CONTROL 
         pitch_rate_tgt = self.pitch_control.evaluate(delta_t, self.pitch_target - pitch)
         pitch_cmd      = self.w_pitch_control.evaluate(delta_t, pitch_rate_tgt - pitch_rate)
 
         roll_rate_tgt  = self.roll_control.evaluate(delta_t, self.roll_target - roll)
         roll_cmd       = self.w_roll_control.evaluate(delta_t, roll_rate_tgt - roll_rate)
 
-        # --- FIX WRAP-AROUND DELLO YAW ---
+        # --- YAW ---
         yaw_err = self.yaw_target - yaw
         # Normalizza l'errore tra -PI e +PI (prende sempre la via più breve)
         yaw_err = (yaw_err + math.pi) % (2 * math.pi) - math.pi
@@ -152,8 +161,8 @@ class MultirotorController:
 
     def set_yaw_direct(self, yaw: float) -> None:
         """Imposta yaw_target istantaneamente, bypassando il filtro passa-basso.
-        Da usare SOLO all'inizio di un nuovo task (fuoco o waypoint iniziale)
+        Da usare all'inizio di un nuovo task (fuoco o waypoint iniziale)
         per evitare che il drone parta con un heading sbagliato.
-        Durante il task continuare a usare set_target(yaw=...) per il filtraggio.
+        Durante il task set_target(yaw=...) per il filtraggio.
         """
         self.yaw_target = (yaw + math.pi) % (2 * math.pi) - math.pi

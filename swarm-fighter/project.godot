@@ -33,6 +33,10 @@ movie_writer/movie_file="/home/mitrandir/scrivania/droni.png"
 
 enabled=PackedStringArray()
 
+[gui]
+
+theme/custom_font="uid://bnc5nboipm7pd"
+
 [layer_names]
 
 3d_physics/layer_1="Enviroment"
