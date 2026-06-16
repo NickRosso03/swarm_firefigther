@@ -224,6 +224,8 @@ func _update_hud() -> void:
 			_fire_label.text = "Fuochi attivi: %d (terra: %d | piante: %d)" % [af, gf, pf]
 			
 			_fire_label.modulate = Color(Color.ORANGE_RED)
+			DDS.publish("world/active_fires_count", DDS.DDS_TYPE_INT,
+			_fire_manager._active_fires.size())
 			
 		
 			 

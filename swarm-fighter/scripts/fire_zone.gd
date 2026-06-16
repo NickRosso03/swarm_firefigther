@@ -19,6 +19,8 @@ extends Node3D
 
 @export var auto_extinguish : bool = false
 
+var rng : RandomNumberGenerator = null
+
 # ── Parametri fuoco su pianta: impostati da FireManager.ignite_plant ─────────
 ## Questi due campi vengono scritti da FireManager PRIMA di activate(),
 ## così activate() sa già che tipo di fuoco sta inizializzando.
@@ -179,13 +181,23 @@ func _try_propagate() -> void:
 	var offset : Vector3
 	if best_plant != null:
 		var dir  := (best_plant.global_position - global_position).normalized()
-		var dist := randf_range(spread_radius * 0.3, spread_radius * 0.6)
+		var dist : float
+		if rng != null:
+			dist = randf_range(spread_radius * 0.3, spread_radius * 0.6)
+		else:
+			dist = randf_range(spread_radius * 0.3, spread_radius * 0.6)
 		offset    = dir * dist
 		offset.y  = 0.0
 	else:
 		var angle := randf() * TAU
-		var dist  := randf_range(spread_radius * 0.3, spread_radius * 0.5)
-		offset     = Vector3(cos(angle) * dist, 0.0, sin(angle) * dist)
+		var dist  : float
+		if rng != null:
+			angle = rng.randf() * TAU
+			dist  = rng.randf_range(spread_radius * 0.3, spread_radius * 0.5)
+		else:
+			angle = randf() * TAU
+			dist  = randf_range(spread_radius * 0.3, spread_radius * 0.5)
+		offset = Vector3(cos(angle) * dist, 0.0, sin(angle) * dist)
 
 	manager.spawn_child_fire(global_position + offset)
 

@@ -6,11 +6,14 @@ extends Node3D
 @export var min_dist_from_center : float = 5.0
 @export var exclusion_zones  : Array[Vector3] = []
 @export var station_exclusion_radius : float = 20.0
+@export var rng_seed : int = 42
+var _rng := RandomNumberGenerator.new()
 
 # Non esportiamo più l'array, lo riempiamo da soli!
 var charging_stations : Array[Node] = []
 
 func _ready() -> void:
+	_rng.seed = rng_seed
 	if obstacle_configs.is_empty():
 		push_error("Nessuna configurazione ostacoli assegnata!")
 		return
@@ -34,17 +37,17 @@ func _ready() -> void:
 
 		while placed < config.count and attempts < max_attempts:
 			attempts += 1
-			var x := randf_range(-area_half, area_half)
-			var z := randf_range(-area_half, area_half)
+			var x := _rng.randf_range(-area_half, area_half)
+			var z := _rng.randf_range(-area_half, area_half)
 			var spawn_pos := Vector3(x, 0, z)
 
 			if _is_valid(spawn_pos):
 				var obs : Node3D = config.scene.instantiate()
 				add_child(obs)
 				obs.global_position = spawn_pos
-				obs.rotation.y = randf() * TAU
+				obs.rotation.y = _rng.randf() * TAU
 
-				var s := randf_range(config.min_scale, config.max_scale)
+				var s := _rng.randf_range(config.min_scale, config.max_scale)
 				obs.scale = Vector3(s, s, s)
 
 				if config.plant:

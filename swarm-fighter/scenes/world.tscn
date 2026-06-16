@@ -138,7 +138,6 @@ metadata/_custom_type_script = "uid://dle752icq53hx"
 [node name="World" type="Node3D" unique_id=59395442]
 script = ExtResource("1_k0juu")
 drone_scene = ExtResource("2_71j4m")
-n_drones = 8
 start_altitude = 1.0
 charging_station_scene = ExtResource("3_pm21f")
 
@@ -164,6 +163,7 @@ script = ExtResource("3_qfnet")
 config = ExtResource("5_2lf6f")
 fire_zone_scene = ExtResource("4_i7141")
 max_ground_fires = 5
+rng_seed = 45
 
 [node name="Camera3D" type="Camera3D" parent="." unique_id=621970684]
 transform = Transform3D(-0.99995536, -0.009353714, 0.0014107754, -0.0053870017, 0.6856787, 0.7278843, -0.0077757593, 0.7278441, -0.68569845, 0, 40, -80)

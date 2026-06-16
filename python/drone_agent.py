@@ -66,12 +66,12 @@ FIRE_STANDOFF_RADIUS = 9.0
 SUPPRESS_TIME   = 10.0    # [s] base; scala con intensità in _suppress_time_for
 INTENSITY_MIN_THRESHOLD = 0.05 # INTENSITY_MIN_THRESHOLD: soglia minima di intensità per considerare un fuoco valido.
 
-TRAJ_VMAX      = 8.0    # [m/s]  velocità di crociera in esplorazione
+TRAJ_VMAX      = 5.0    # [m/s]  velocità di crociera in esplorazione
 TRAJ_ACC       = 2.0    # [m/s²] accelerazione
 TRAJ_DEC       = 3.0    # [m/s²] decelerazione
 TRAJ_THRESHOLD = 5.0    # [m]    distanza drone-waypoint per commutare
  
-FIRE_VMAX      = 7.0    # [m/s]  velocità di avvicinamento al fuoco
+FIRE_VMAX      = 6.0    # [m/s]  velocità di avvicinamento al fuoco
 FIRE_ACC       = 2.0    # [m/s²] accelerazione
 FIRE_DEC       = 2.0    # [m/s²] decelerazione
 
@@ -87,7 +87,7 @@ STATION_RADIUS     =   2.5   # [m] distanza massima per considerarsi sopra la st
 
 
 #----------------------------------------------------------------------------
-N_DRONES        = 8
+N_DRONES        = 5
 DDS_HOST        = '127.0.0.1'
 DDS_PORT        = 4444
 

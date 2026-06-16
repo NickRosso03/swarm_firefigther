@@ -12,8 +12,12 @@
 ## Logica di spawn adattiva:
 ##   intervallo = rand(min_interval, max_interval) × (1 + ground_fires × spawn_slowdown)
 ##   → più fuochi attivi ci sono, più tempo passa prima del prossimo spawn.
-##   Solo gli spawn a terra hanno un cap (max_ground_fires).
-##   La propagazione pianta→pianta è libera (frenata dalla fisica: plant_spread_radius).
+##
+## Cap e kill switch:
+##   max_ground_fires  → limite totale fuochi a terra (spontanei + propagati).
+##                        0 = nessun fuoco a terra di nessun tipo.
+##   max_plant_fires   → limite fuochi su pianta. 0 = nessun fuoco su pianta.
+##   enable_spawning   → false = blocco completo di tutti gli spawn.
 
 extends Node3D
 
@@ -35,8 +39,14 @@ extends Node3D
 ## Intervallo massimo [s] tra spawn spontanei a terra (prima del moltiplicatore adattivo).
 @export var max_interval      : float = 18.0
 
-## Cap sugli spawn spontanei a terra. Non limita la propagazione.
+## Kill switch globale: false = nessuno spawn di nessun tipo.
+@export var enable_spawning   : bool  = true
+
+## Cap totale fuochi a terra (spontanei + propagati). 0 = disabilitati.
 @export var max_ground_fires  : int   = 10
+
+## Cap totale fuochi su pianta. 0 = disabilitata ignizione piante.
+@export var max_plant_fires   : int   = 20
 
 ## Fattore di rallentamento adattivo. Con N fuochi a terra attivi:
 ## intervallo × (1 + N × spawn_slowdown).
@@ -44,6 +54,9 @@ extends Node3D
 @export var spawn_slowdown    : float = 0.2
 
 @export var fire_altitude     : float = 0.0
+
+@export var rng_seed : int = 42
+var _rng := RandomNumberGenerator.new()
 
 # ---------------------------------------------------------------------------
 # Stato interno
@@ -73,7 +86,7 @@ var _next_spawn_at : float = 0.0
 func _ready() -> void:
 	if config == null:
 		push_error("FireManager: 'config' (FireConfig) non assegnata! Crea un .tres da FireConfig.")
-	randomize()
+	_rng.seed = rng_seed 
 	_schedule_next_spawn()
 	print("FireManager: pronto. Primo incendio tra %.1f s" % _next_spawn_at)
 
@@ -91,8 +104,10 @@ func _process(delta: float) -> void:
 # ---------------------------------------------------------------------------
 
 func _try_spawn_fire() -> void:
-	if _ground_fire_ids.size() >= max_ground_fires:
-		return   # riprova al prossimo intervallo adattivo
+	if not enable_spawning:
+		return
+	if max_ground_fires <= 0 or _ground_fire_ids.size() >= max_ground_fires:
+		return   # cap raggiunto o fuochi a terra disabilitati
 	if fire_zone_scene == null:
 		push_error("FireManager: fire_zone_scene non assegnata!")
 		return
@@ -100,8 +115,8 @@ func _try_spawn_fire() -> void:
 
 
 func _random_position() -> Vector3:
-	var x := randf_range(area_min.x, area_max.x)
-	var z := randf_range(area_min.y, area_max.y)
+	var x := _rng.randf_range(area_min.x, area_max.x)
+	var z := _rng.randf_range(area_min.y, area_max.y)
 	return Vector3(x, fire_altitude, z)
 
 
@@ -109,7 +124,7 @@ func _random_position() -> Vector3:
 ## Con più fuochi a terra attivi l'intervallo cresce, rallentando gli spawn spontanei.
 func _schedule_next_spawn() -> void:
 	var multiplier := 1.0 + _ground_fire_ids.size() * spawn_slowdown
-	_next_spawn_at = randf_range(min_interval, max_interval) * multiplier
+	_next_spawn_at = _rng.randf_range(min_interval, max_interval) * multiplier
 
 
 ## Istanzia e attiva una FireZone, passandole la config centralizzata.
@@ -125,6 +140,7 @@ func _spawn_fire_at(pos: Vector3, is_plant: bool) -> int:
 	var zone : Node3D = fire_zone_scene.instantiate()
 	add_child(zone)
 	zone.extinguished.connect(_on_fire_extinguished)
+	zone.rng = _rng
 	zone.activate(id, pos, config)   # ← config passata qui
 
 	_active_fires[id] = zone
@@ -159,9 +175,14 @@ func _on_fire_extinguished(id: int) -> void:
 # ---------------------------------------------------------------------------
 
 func spawn_child_fire(pos: Vector3) -> void:
-	## Figlio a terra: clampato nell'arena.
-	## Ogni fuoco a terra propaga al massimo una volta (_spread_done in fire_zone),
-	## quindi il numero è naturalmente limitato senza un cap esplicito.
+	## Fuoco figlio da propagazione a terra.
+	## Rispetta max_ground_fires: se il cap è 0 (o raggiunto) non spawna.
+	## NOTA: senza questo check ogni figlio propagherebbe a sua volta,
+	## creando una catena esponenziale non controllabile dall'Inspector.
+	if not enable_spawning:
+		return
+	if max_ground_fires <= 0 or _ground_fire_ids.size() >= max_ground_fires:
+		return
 	if fire_zone_scene == null:
 		return
 	var x_min = min(area_min.x, area_max.x);  var x_max = max(area_min.x, area_max.x)
@@ -180,8 +201,11 @@ func spawn_child_fire(pos: Vector3) -> void:
 # ---------------------------------------------------------------------------
 
 func ignite_plant(plant: Node3D) -> void:
-	## Nessun cap: la propagazione pianta→pianta è libera.
-	## Il freno naturale è plant_spread_radius in FireConfig.
+	## Rispetta max_plant_fires: 0 = ignizione piante disabilitata.
+	if not enable_spawning:
+		return
+	if max_plant_fires <= 0 or _burning_plants.size() >= max_plant_fires:
+		return
 	if not is_instance_valid(plant):
 		return
 	if plant in _burning_plants.values():
